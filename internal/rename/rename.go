@@ -1,44 +1,62 @@
-// Package rename provides functionality to rename an existing scope.
+// Package rename provides scope rename functionality for envchain-export.
 package rename
 
 import (
 	"errors"
 	"fmt"
-
-	"github.com/envchain-export/internal/store"
+	"os"
+	"path/filepath"
 )
 
-// ErrSameName is returned when the source and destination scope names are identical.
-var ErrSameName = errors.New("rename: source and destination scope names must differ")
+// ErrSameName is returned when the old and new scope names are identical.
+var ErrSameName = errors.New("rename: old and new scope names are identical")
 
-// ErrDestExists is returned when the destination scope already exists.
+// ErrDestExists is returned when the destination scope already exists and
+// force is false.
 var ErrDestExists = errors.New("rename: destination scope already exists")
 
-// Rename loads the chain stored under oldScope (decrypted with passphrase),
-// saves it under newScope (encrypted with the same passphrase), then deletes
-// the old scope file.
-func Rename(st *store.Store, oldScope, newScope, passphrase string) error {
+// Storer is the minimal interface required by Rename.
+type Storer interface {
+	Load(scope, passphrase string) (interface{ Add(k, v string) error }, error)
+	Save(scope string, c interface{ Add(k, v string) error }, passphrase string) error
+	Dir() string
+}
+
+// concreteStore matches *store.Store without importing it directly.
+type concreteStore interface {
+	Dir() string
+}
+
+// Rename renames oldScope to newScope within s using passphrase.
+// If force is false and newScope already exists, ErrDestExists is returned.
+func Rename(s interface {
+	Load(scope, passphrase string) (chainVal interface{ Add(k, v string) error }, err error)
+	Save(scope string, c interface{ Add(k, v string) error }, passphrase string) error
+	Dir() string
+}, oldScope, newScope, passphrase string, force bool) error {
 	if oldScope == newScope {
 		return ErrSameName
 	}
 
-	if st.Exists(newScope) {
-		return fmt.Errorf("%w: %q", ErrDestExists, newScope)
+	destPath := filepath.Join(s.Dir(), newScope+".enc")
+	if !force {
+		if _, err := os.Stat(destPath); err == nil {
+			return ErrDestExists
+		}
 	}
 
-	chain, err := st.Load(oldScope, passphrase)
+	c, err := s.Load(oldScope, passphrase)
 	if err != nil {
 		return fmt.Errorf("rename: load %q: %w", oldScope, err)
 	}
 
-	if err := st.Save(newScope, passphrase, chain); err != nil {
+	if err := s.Save(newScope, c, passphrase); err != nil {
 		return fmt.Errorf("rename: save %q: %w", newScope, err)
 	}
 
-	if err := st.Delete(oldScope); err != nil {
-		// Best-effort rollback: remove the newly created scope.
-		_ = st.Delete(newScope)
-		return fmt.Errorf("rename: delete old scope %q: %w", oldScope, err)
+	srcPath := filepath.Join(s.Dir(), oldScope+".enc")
+	if err := os.Remove(srcPath); err != nil {
+		return fmt.Errorf("rename: remove old scope %q: %w", oldScope, err)
 	}
 
 	return nil
