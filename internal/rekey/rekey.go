@@ -32,16 +32,19 @@ func Rekey(storeDir, oldPass, newPass string) ([]Result, error) {
 
 	results := make([]Result, 0, len(scopes))
 	for _, name := range scopes {
-		s, err := store.New(storeDir, name)
-		if err != nil {
-			results = append(results, Result{Scope: name, Success: false, Err: err})
-			continue
-		}
-		if err := rotate.Rotate(s, oldPass, newPass); err != nil {
-			results = append(results, Result{Scope: name, Success: false, Err: err})
-			continue
-		}
-		results = append(results, Result{Scope: name, Success: true})
+		results = append(results, rekeyScope(storeDir, name, oldPass, newPass))
 	}
 	return results, nil
+}
+
+// rekeyScope attempts to rekey a single scope and returns the corresponding Result.
+func rekeyScope(storeDir, name, oldPass, newPass string) Result {
+	s, err := store.New(storeDir, name)
+	if err != nil {
+		return Result{Scope: name, Success: false, Err: fmt.Errorf("open store: %w", err)}
+	}
+	if err := rotate.Rotate(s, oldPass, newPass); err != nil {
+		return Result{Scope: name, Success: false, Err: fmt.Errorf("rotate: %w", err)}
+	}
+	return Result{Scope: name, Success: true}
 }
