@@ -86,3 +86,16 @@ func TestDiff_SortedByKey(t *testing.T) {
 		t.Errorf("entries not sorted: %v", keys)
 	}
 }
+
+func TestDiff_EmptyChains(t *testing.T) {
+	base := newChain(t, "scope", map[string]string{})
+	target := newChain(t, "scope", map[string]string{})
+
+	r := diff.Diff(base, target)
+	if r.HasChanges() {
+		t.Errorf("expected no changes for two empty chains, got %d entries", len(r.Entries))
+	}
+	if len(r.Entries) != 0 {
+		t.Errorf("expected 0 entries, got %d", len(r.Entries))
+	}
+}
