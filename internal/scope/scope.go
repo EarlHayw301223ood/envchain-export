@@ -14,6 +14,11 @@ import (
 // ErrNoScopes is returned when the store directory contains no scopes.
 var ErrNoScopes = errors.New("scope: no scopes found")
 
+// encPath returns the path to the encrypted file for the given scope name.
+func encPath(storeDir, name string) string {
+	return filepath.Join(storeDir, name+".enc")
+}
+
 // List returns all scope names persisted under storeDir.
 // Each scope corresponds to a file named "<scope>.enc" in the directory.
 func List(storeDir string) ([]string, error) {
@@ -47,8 +52,7 @@ func Exists(storeDir, name string) (bool, error) {
 	if err := validate.Key(name); err != nil {
 		return false, err
 	}
-	path := filepath.Join(storeDir, name+".enc")
-	_, err := os.Stat(path)
+	_, err := os.Stat(encPath(storeDir, name))
 	if err == nil {
 		return true, nil
 	}
@@ -63,8 +67,7 @@ func Delete(storeDir, name string) error {
 	if err := validate.Key(name); err != nil {
 		return err
 	}
-	path := filepath.Join(storeDir, name+".enc")
-	if err := os.Remove(path); err != nil {
+	if err := os.Remove(encPath(storeDir, name)); err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return errors.New("scope: " + name + " does not exist")
 		}
